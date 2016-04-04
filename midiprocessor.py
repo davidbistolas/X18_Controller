@@ -1,8 +1,7 @@
 from midireceiver import MidiReceiver
-import threading
 import Queue
-
-CONTROL_OFFSET = 177
+import threading
+CONTROL_OFFSET = 176
 NOTE_ON_OFFSET = 144
 NOTE_OFF_OFFSET = 128
 
@@ -29,8 +28,11 @@ class MidiProcessor(threading.Thread):
         self.listen = True
         self.osc_controller = osc_controller
         self.midi_queue = Queue.Queue()
-        self.midi_source = MidiReceiver(self.midi_queue, midi_driver_name)
-        self.midi_source.start()
+        self.osc_controller.start()
+        self.osc_controller.find_mixer()
+        midi_driver_name = self.osc_controller.mixer_name
+        self.midi_receiver = MidiReceiver(self.osc_controller, midi_driver_name)
+        self.midi_receiver.start()
         super(MidiProcessor, self).__init__()
         self.start_listening()
 
@@ -48,25 +50,35 @@ class MidiProcessor(threading.Thread):
         """
         self.listen = False
 
+    def stop(self):
+        """
+        Stop the services.
+        """
+        self.midi_receiver.stop()
+        self.osc_controller.stop()
+
     def parse_midi(self, message):
         """
         Parse the midi message
         :param message:
         :return:
         """
-
         m_type = message[0]
-
         # a program change on ANY midi channel changes the snapshot
         # the snapshot must exist on the device. we're not wizards, you
         # know.
         if m_type in range(CONTROL_OFFSET, CONTROL_OFFSET + 16):
-            if len(message) == 8:
-                self.osc_controller.snapshot(message[7])
+#            if len(message) == 8:
+#                self.osc_controller.snapshot(message[7])
             if len(message) == 3:
-                channel = (CONTROL_OFFSET - message[0]) + 1
+                channel = (message[0] - CONTROL_OFFSET) + 1
                 controller = message[1]
                 value = message[2]
+                # 9: volume change on AUX. Pin to MIDI channel 1
+                if (controller == 9) and (channel == 1):
+                    value = (value * 8)
+                    self.osc_controller.set_return_fader('aux', value)
+
                 # 7: volume change
                 if controller == 7:
                     value = (value * 8)
@@ -88,7 +100,7 @@ class MidiProcessor(threading.Thread):
                     value = (value * 8) - 1
                     self.osc_controller.set_bus_fader(channel, value)
                 # 17: Rtn Volume Change
-                if controller == 16:
+                if controller == 17:
                     value = (value * 8) - 1
                     self.osc_controller.set_return_fader(channel, value)
         # mute on
@@ -142,5 +154,7 @@ class MidiProcessor(threading.Thread):
 
         while self.listen:
             message = self.midi_queue.get()
+
+            print self.midi_queue.qsize(), " items in queue", message
             self.parse_midi(message)
             self.midi_queue.task_done()

@@ -3,31 +3,33 @@ Behringer OSC Mute Automation Controller
 """
 import threading
 import OSC
-import Queue
 from x18mixer import MixerElement, MuteElement, FaderElement, SnapElement, PanElement
-from behringersender import BehringerSender
-
+import netifaces
+import ipcalc
+import socket
 
 class BehringerController(threading.Thread):
-    def __init__(self, ip, port=10024):
+    def __init__(self, ip=None, port=10024, notifier=None):
+        self.ip = ip
+        self.ready = False
+        self.port = port
         self.server = OSC.ThreadingOSCServer(("0.0.0.0", port))
         self.client = OSC.OSCClient(server=self.server)
-        self.client.connect((ip, port))
-        self.queue = Queue.Queue()
-        self.osc_sender = BehringerSender(self.client, self.queue)
-        print "Starting osc_sender"
-        self.osc_sender.start()
-        print "Setting up listeners"
+        self.notifier = notifier
+        self.mixer_name = None
+        self.notify ( "Setting up listeners")
         self.ready = False
         self.info = {
             'model': None,
             'address': None,
             'version': None,
             'name': None}
+
         self.info_call = MixerElement(
-            "/xinfo", self.queue, self.server, self.info_callback)
+            "/xinfo", self.client, self.server, self.info_callback)
+        self.server.handle_error = self.handle_error
         self.snapshot_call = SnapElement(
-            "/-snap/load", self.queue, self.server)
+            "/-snap/load", self.client, self.server)
         self.mixer = {
             'ch': {},
             'fxsend': {},
@@ -43,10 +45,10 @@ class BehringerController(threading.Thread):
             self.mixer["dca"][str(special_number)] = {}
             self.mixer["dca"][
                 str(special_number)]['fader'] = FaderElement(
-                fader, self.queue, self.server)
+                fader, self.client, self.server)
             self.mixer["dca"][
                 str(special_number)]['on'] = MuteElement(
-                mute, self.queue, self.server)
+                mute, self.client, self.server)
 
         for ch in range(1, 17):
             if ch < 10:
@@ -60,11 +62,11 @@ class BehringerController(threading.Thread):
 
             self.mixer["ch"][channel_number] = {}
             self.mixer["ch"][channel_number]['fader'] = FaderElement(
-                fader, self.queue, self.server)
+                fader, self.client, self.server)
             self.mixer["ch"][channel_number]['on'] = MuteElement(
-                mute, self.queue, self.server)
+                mute, self.client, self.server)
             self.mixer["ch"][channel_number]['pan'] = PanElement(
-                pan, self.queue, self.server)
+                pan, self.client, self.server)
 
         for rtn in range(1, 5):
             rtn_number = str(rtn)
@@ -75,11 +77,11 @@ class BehringerController(threading.Thread):
 
             self.mixer["ch"][rtn_number] = {}
             self.mixer["ch"][rtn_number]['fader'] = FaderElement(
-                fader, self.queue, self.server)
+                fader, self.client, self.server)
             self.mixer["ch"][rtn_number]['on'] = MuteElement(
-                mute, self.queue, self.server)
+                mute, self.client, self.server)
             self.mixer["ch"][rtn_number]['pan'] = PanElement(
-                pan, self.queue, self.server)
+                pan, self.client, self.server)
 
         for bus in range(1, 7):
             bus_number = str(bus)
@@ -90,11 +92,11 @@ class BehringerController(threading.Thread):
 
             self.mixer["bus"][bus_number] = {}
             self.mixer["bus"][bus_number]['fader'] = FaderElement(
-                fader, self.queue, self.server)
+                fader, self.client, self.server)
             self.mixer["bus"][bus_number]['on'] = MuteElement(
-                mute, self.queue, self.server)
+                mute, self.client, self.server)
             self.mixer["bus"][bus_number]['pan'] = PanElement(
-                pan, self.queue, self.server)
+                pan, self.client, self.server)
 
         for insert in ["fxsend", "rtn"]:
             for insert_number in range(1, 5):
@@ -103,29 +105,95 @@ class BehringerController(threading.Thread):
                 self.mixer[insert][str(insert_number)] = {}
                 self.mixer[insert][
                     str(insert_number)]['fader'] = FaderElement(
-                    fader, self.queue, self.server)
+                    fader, self.client, self.server)
                 self.mixer[insert][
                     str(insert_number)]['on'] = MixerElement(
-                    mute, self.queue, self.server)
+                    mute, self.client, self.server)
 
-        for mutegroup_number in range(1, 5):
-            mute = "/config/mute/" + str(mutegroup_number)
-            self.mixer["mutegrp"][str(mutegroup_number)] = {}
-            self.mixer["mutegrp"][
-                str(mutegroup_number)]['on'] = MixerElement(
-                mute, self.queue, self.server)
+            for mutegroup_number in range(1, 5):
+                mute = "/config/mute/" + str(mutegroup_number)
+                self.mixer["mutegrp"][str(mutegroup_number)] = {}
+                self.mixer["mutegrp"][
+                    str(mutegroup_number)]['on'] = MixerElement(
+                    mute, self.client, self.server)
+
+        fader = "/rtn/aux/mix/fader"
+        mute = "/rtn/aux/mix/on"
+        self.mixer['rtn']['aux'] = {}
+        self.mixer['rtn']['aux']['fader'] = FaderElement(fader, self.client, self.server)
+        self.mixer['rtn']['aux']['on'] = MixerElement(mute, self.client, self.server)
 
         super(BehringerController, self).__init__()
+
+    def notify(self, m):
+        if self.notifier:
+            self.notifier(m)
+        else:
+            print m
 
     def run(self):
         """
         Thread run method
         :return:
         """
-        # not happy with this solution- it's possible due to network latency that this will
-        # get missed.
-        self.get_info()
+        self.notify ( "Starting OSC Connection" )
         self.server.serve_forever()
+
+    def stop(self):
+        """
+        Stop method
+        """
+        self.notify ( "Shutting down OSC Connector" )
+        self.server.close()
+
+    def handle_error(self, request, client_address):
+        """
+        Monkey patched handle_error.
+        """
+        pass
+
+    def find_mixer(self):
+        """
+        Find the first mixer on the net.
+        Basically block the server until /xinfo returns
+        """
+
+        self.ready = False
+        def get_net_size(netmask):
+            binary_str = ''
+            for octet in netmask:
+                binary_str += bin(int(octet))[2:].zfill(8)
+            return str(len(binary_str.rstrip('0')))
+
+        gws = netifaces.gateways()
+        interface = gws['default'][netifaces.AF_INET][1]
+        addrs = netifaces.ifaddresses(interface)
+        address = addrs[netifaces.AF_INET][0]['addr'].split('.')
+        netmask = addrs[netifaces.AF_INET][0]['netmask'].split('.')
+
+        net_start = [str(int(address[x]) & int(netmask[x])) for x in range(0, 4)]
+
+        cidr ='.'.join(net_start) + '/' + get_net_size(netmask)
+
+        netrange = []
+        for ip in ipcalc.Network(cidr):
+            netrange.append(str(ip))
+
+        while self.ready == False:
+            for ip in netrange:
+                mixer = (ip, self.port)
+                oscmsg = OSC.OSCMessage()
+                oscmsg.setAddress("/xinfo")
+                try:
+                    self.client.sendto(oscmsg, mixer, 1)
+                except socket.error:
+                    netrange.remove(ip)
+                except OSC.OSCClientError:
+                    netrange.remove(ip)
+
+        ip=self.info['address']
+        self.mixer_name = self.info["name"]
+        self.client.connect((ip, self.port))
 
     def get_info(self):
         """

@@ -6,7 +6,7 @@ class MixerElement:
     Mixer Element class. Represents a channel, return, dca, bus etc.
     """
 
-    def __init__(self, address, queue, server, callback=None):
+    def __init__(self, address, client, server, callback=None):
         """
         Initializer
         :param address:
@@ -20,7 +20,7 @@ class MixerElement:
             self.callback = self._empty_callback
         self.value = None
         self.server.addMsgHandler(self.address, self.handler)
-        self.message_queue = queue
+        self.client = client
 
     def value_convert(self, value):
         """
@@ -73,7 +73,8 @@ class MixerElement:
         Send the OSC message
 
         """
-        self.message_queue.put(message)
+#        self.message_queue.put(message)
+        self.client.send(message)
 
 
 class SnapElement(MixerElement):
