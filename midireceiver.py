@@ -1,6 +1,17 @@
-from midireceiver import MidiReceiver
-import Queue
+#from simplecoremidi import MIDIDestination
 import threading
+import itertools
+import rtmidi
+
+def split_seq(iterable, size):
+    """Little hack to split iterables up"""
+    it = iter(iterable)
+    item = list(itertools.islice(it, size))
+    while item:
+        yield item
+        item = list(itertools.islice(it, size))
+
+
 CONTROL_OFFSET = 176
 NOTE_ON_OFFSET = 144
 NOTE_OFF_OFFSET = 128
@@ -15,47 +26,16 @@ RTN_MUTE = 56
 MUTE_GROUP = 60
 
 
-class MidiProcessor(threading.Thread):
-    """
-    Midi receiver server
-    """
+class MidiInputHandler:
+    """Midi Input Handler"""
 
-    def __init__(self, osc_controller, midi_driver_name="Behringer XAir OSC"):
-        """
-        Initialize MidiReceiver
-        :return:
-        """
-        self.listen = True
+    def __init__(self, osc_controller):
         self.osc_controller = osc_controller
-        self.midi_queue = Queue.Queue()
-        self.osc_controller.start()
-        self.osc_controller.find_mixer()
-        midi_driver_name = self.osc_controller.mixer_name
-        self.midi_receiver = MidiReceiver(self.osc_controller, midi_driver_name)
-        self.midi_receiver.start()
-        super(MidiProcessor, self).__init__()
-        self.start_listening()
 
-    def start_listening(self):
-        """
-        Start listening to midi
-        :return:
-        """
-        self.listen = True
-
-    def stop_listening(self):
-        """
-        Start listening to midi
-        :return:
-        """
-        self.listen = False
-
-    def stop(self):
-        """
-        Stop the services.
-        """
-        self.midi_receiver.stop()
-        self.osc_controller.stop()
+    def __call__(self, event, data=None):
+        message, deltatime = event
+        print event
+        self.parse_midi(message)
 
     def parse_midi(self, message):
         """
@@ -68,8 +48,8 @@ class MidiProcessor(threading.Thread):
         # the snapshot must exist on the device. we're not wizards, you
         # know.
         if m_type in range(CONTROL_OFFSET, CONTROL_OFFSET + 16):
-#            if len(message) == 8:
-#                self.osc_controller.snapshot(message[7])
+            #            if len(message) == 8:
+            #                self.osc_controller.snapshot(message[7])
             if len(message) == 3:
                 channel = (message[0] - CONTROL_OFFSET) + 1
                 controller = message[1]
@@ -146,15 +126,32 @@ class MidiProcessor(threading.Thread):
                 channel = message[1] - (RTN_MUTE - 1)
                 self.osc_controller.set_return_mute(channel, 0)
 
+class MidiReceiver(threading.Thread):
+    """
+    Threaded, queue enabled midi reciever
+    """
+
+    def __init__(self, osc_controller, driver_name):
+        """
+        Init Method
+        """
+        self.midi_driver_name = driver_name
+        midiin = rtmidi.MidiIn()
+        self.rtmidiin = midiin.open_virtual_port(driver_name)
+        self.rtmidiin.set_callback(MidiInputHandler(osc_controller))
+        self.active = False
+        super(MidiReceiver, self).__init__()
+
     def run(self):
         """
-        Run the midi server
-        :return:
+        Run Method
         """
+        print "Midi Driver", self.midi_driver_name, "is now starting..."
+        self.active = True
+    def stop(self):
+        """
+        Stop the listener
+        """
+        print "Midi Driver", self.midi_driver_name, "is shutting down..."
+        self.active = False
 
-        while self.listen:
-            message = self.midi_queue.get()
-
-            print self.midi_queue.qsize(), " items in queue", message
-            self.parse_midi(message)
-            self.midi_queue.task_done()

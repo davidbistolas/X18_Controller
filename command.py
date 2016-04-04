@@ -1,5 +1,5 @@
 import controller
-import midiprocessor
+import midireceiver
 import rumps
 
 _ip = '192.168.0.108'
@@ -29,7 +29,8 @@ class Bridge(rumps.App):
     def run_bridge(self, _):
         """ Starts up the bridge """
         self.controller = controller.BehringerController(self.ip)
-        self.service = midiprocessor.MidiProcessor(self.controller)
+        driver_name = ""
+        self.service = midireceiver.MidiReceiver(self.controller, driver_name)
         self.service.start()
 
 
@@ -62,5 +63,8 @@ if __name__ == '__main__':
     #repeater = Bridge()
     #repeater.run()
     controller = controller.BehringerController()
-    service = midiprocessor.MidiProcessor(controller)
+    controller.start()
+    controller.find_mixer()
+    print "Found", controller.mixer_name
+    service = midireceiver.MidiReceiver(controller,controller.mixer_name)
     service.start()
