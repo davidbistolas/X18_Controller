@@ -11,8 +11,9 @@ def split_seq(iterable, size):
         yield item
         item = list(itertools.islice(it, size))
 
-
 CONTROL_OFFSET = 176
+PROGRAM_OFFSET = 192
+
 NOTE_ON_OFFSET = 144
 NOTE_OFF_OFFSET = 128
 
@@ -34,7 +35,6 @@ class MidiInputHandler:
 
     def __call__(self, event, data=None):
         message, deltatime = event
-        print event
         self.parse_midi(message)
 
     def parse_midi(self, message):
@@ -47,26 +47,15 @@ class MidiInputHandler:
         # a program change on ANY midi channel changes the snapshot
         # the snapshot must exist on the device. we're not wizards, you
         # know.
+
+        if m_type in range(PROGRAM_OFFSET, PROGRAM_OFFSET + 16):
+            self.osc_controller.snapshot(message[1])
+
         if m_type in range(CONTROL_OFFSET, CONTROL_OFFSET + 16):
-            #            if len(message) == 8:
-            #                self.osc_controller.snapshot(message[7])
             if len(message) == 3:
                 channel = (message[0] - CONTROL_OFFSET) + 1
                 controller = message[1]
                 value = message[2]
-                # 9: volume change on AUX. Pin to MIDI channel 1
-                if (controller == 9) and (channel == 1):
-                    value = (value * 8)
-                    self.osc_controller.set_return_fader('aux', value)
-
-                # 7: volume change
-                if controller == 7:
-                    value = (value * 8)
-                    self.osc_controller.set_channel_fader(channel, value)
-                # 8: Pan
-                if controller == 10:
-                    value = int((round(value, 3) / 127) * 100)
-                    self.osc_controller.set_channel_pan(channel, value)
                 # 14: DCA volume change
                 if controller == 14:
                     value = (value * 8) - 1
@@ -75,10 +64,6 @@ class MidiInputHandler:
                 if controller == 15:
                     value = (value * 8) - 1
                     self.osc_controller.set_fxsend_fader(channel, value)
-                # 16: Bus Volume Change
-                if controller == 16:
-                    value = (value * 8) - 1
-                    self.osc_controller.set_bus_fader(channel, value)
                 # 17: Rtn Volume Change
                 if controller == 17:
                     value = (value * 8) - 1

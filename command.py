@@ -28,17 +28,19 @@ class Bridge(rumps.App):
     @rumps.clicked("Start")
     def run_bridge(self, _):
         """ Starts up the bridge """
-        self.controller = controller.BehringerController(self.ip)
-        driver_name = ""
-        self.service = midireceiver.MidiReceiver(self.controller, driver_name)
+        self.controller = controller.BehringerController()
+        self.controller.start()
+        self.controller.find_mixer()
+        rumps.notification("XAir OSC Bridge", "Connected!", "Connected to "+self.controller.mixer_name)
+        self.service = midireceiver.MidiReceiver(controller, self.controller.mixer_name)
         self.service.start()
-
 
     @rumps.clicked("Stop")
     def stop_bridge(self, _):
         """ Stops the bridge """
-        if self.service:
+        if self.service and self.controller:
             self.service.stop()
+            self.controller.stop()
             del self.service
             del self.controller
 

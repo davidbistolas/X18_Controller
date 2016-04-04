@@ -73,7 +73,7 @@ class MixerElement:
         Send the OSC message
 
         """
-#        self.message_queue.put(message)
+        print message
         self.client.send(message)
 
 
