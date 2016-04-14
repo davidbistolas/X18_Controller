@@ -73,7 +73,6 @@ class MixerElement:
         Send the OSC message
 
         """
-        print message
         self.client.send(message)
 
 

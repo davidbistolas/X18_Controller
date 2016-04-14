@@ -1,4 +1,3 @@
-#from simplecoremidi import MIDIDestination
 import threading
 import itertools
 import rtmidi

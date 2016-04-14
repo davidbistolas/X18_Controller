@@ -136,14 +136,14 @@ class BehringerController(threading.Thread):
         Thread run method
         :return:
         """
-        self.notify ( "Starting OSC Connection" )
+        self.notify( "Starting OSC Connection" )
         self.server.serve_forever()
 
     def stop(self):
         """
         Stop method
         """
-        self.notify ( "Shutting down OSC Connector" )
+        self.notify( "Shutting down OSC Connector" )
         self.server.close()
 
     def handle_error(self, request, client_address):

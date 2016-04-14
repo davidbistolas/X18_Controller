@@ -2,8 +2,6 @@ import controller
 import midireceiver
 import rumps
 
-_ip = '192.168.0.108'
-
 __appname__ = "OSC Bridge"
 
 
@@ -32,7 +30,7 @@ class Bridge(rumps.App):
         self.controller.start()
         self.controller.find_mixer()
         rumps.notification("XAir OSC Bridge", "Connected!", "Connected to "+self.controller.mixer_name)
-        self.service = midireceiver.MidiReceiver(controller, self.controller.mixer_name)
+        self.service = midireceiver.MidiReceiver(self.controller, self.controller.mixer_name)
         self.service.start()
 
     @rumps.clicked("Stop")
@@ -57,16 +55,15 @@ class Bridge(rumps.App):
         try:
             self.service.stop()
         except Exception, e:
-            print e
+            pass
         rumps.quit_application()
 
 
 if __name__ == '__main__':
-    #repeater = Bridge()
-    #repeater.run()
-    controller = controller.BehringerController()
-    controller.start()
-    controller.find_mixer()
-    print "Found", controller.mixer_name
-    service = midireceiver.MidiReceiver(controller,controller.mixer_name)
-    service.start()
+    Bridge().run()
+    #controller = controller.BehringerController()
+    #controller.start()
+    #controller.find_mixer()
+    #print "Found", controller.mixer_name
+    #service = midireceiver.MidiReceiver(controller,controller.mixer_name)
+    #service.start()
