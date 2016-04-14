@@ -17,7 +17,7 @@ class Bridge(rumps.App):
 
         self.driver_name = driver_name
         icon = None
-        menu = ["Start", "Stop", "Reset"]
+        menu = ["Start", "Stop"]
         self.ip = ip
         self.service = None
         self.controller = None
@@ -42,11 +42,11 @@ class Bridge(rumps.App):
             del self.service
             del self.controller
 
-    @rumps.clicked("Reset")
-    def stop_bridge(self, _):
-        """ Stops the bridge """
-        if self.service:
-            self.service.stop()
+    #@rumps.clicked("Reset")
+    #def stop_bridge(self, _):
+    #    """ Stops the bridge """
+    #    if self.service:
+    #        self.service.stop()
 
     # noinspection PyBroadException\\
 
