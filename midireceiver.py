@@ -64,7 +64,7 @@ class MidiInputHandler:
                     value = (value * 8) - 1
                     self.osc_controller.set_fxsend_fader(channel, value)
                 # 17: Rtn Volume Change
-                if controller == 17:
+                if controller == 16:
                     value = (value * 8) - 1
                     self.osc_controller.set_return_fader(channel, value)
         # mute on
